@@ -8,10 +8,11 @@ using MailChimp.Net.Models;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Umbraco.Forms.Core;
+using Umbraco.Forms.Core.Attributes;
 using Umbraco.Forms.Core.Enums;
 using Umbraco.Forms.Core.Interfaces;
+using Umbraco.Forms.Core.Persistence.Dtos;
 using Umbraco.Forms.Core.Providers.Models;
-using UmbracoSetting = Umbraco.Forms.Core.Attributes.Setting;
 
 namespace Our.Umbraco.Forms.Mailchimp.Workflow.Workflows
 {
@@ -20,16 +21,16 @@ namespace Our.Umbraco.Forms.Mailchimp.Workflow.Workflows
         private readonly ILogger<MailChimpWorkFlowType> _logger;
         #region Settings
 
-        [UmbracoSetting("API KEY", View = "TextField", Description = "Enter the Mailchimp API key.")]
+        [Setting("API KEY", View = "TextField", Description = "Enter the Mailchimp API key.")]
         public string ApiKey { get; set; }
 
-        [UmbracoSetting("List ID", View = "TextField", Description = "Enter the Mailchimp List ID.")]
+        [Setting("List ID", View = "TextField", Description = "Enter the Mailchimp List ID.")]
         public string ListID { get; set; }
 
-        [UmbracoSetting("Fields", View = "FieldMapper", Description = "Map the needed fields .Minimum Email field for subscribe.")]
+        [Setting("Fields", View = "FieldMapper", Description = "Map the needed fields .Minimum Email field for subscribe.")]
         public string Fields { get; set; }
 
-        [UmbracoSetting("Tags", View = "TextField", Description = "List of Tags. Separate by semicolon ';'. Tag must be created before being used. i.e: User; Help Center")]
+        [Setting("Tags", View = "TextField", Description = "List of Tags. Separate by semicolon ';'. Tag must be created before being used. i.e: User; Help Center")]
         public string Tags { get; set; }
 
         #endregion
@@ -43,7 +44,7 @@ namespace Our.Umbraco.Forms.Mailchimp.Workflow.Workflows
             this.Icon = "icon-autofill";
         }
 
-        public override WorkflowExecutionStatus Execute(WorkflowExecutionContext context)
+        public override async Task<WorkflowExecutionStatus> ExecuteAsync(WorkflowExecutionContext context)
         {
             try
             {
@@ -53,7 +54,7 @@ namespace Our.Umbraco.Forms.Mailchimp.Workflow.Workflows
                     throw new Exception("Email is missing");
                 }
 
-                Task.Run(async () =>
+                await Task.Run(async () =>
                 {
                     await SubscribeMember(email, mergeFields);
 
@@ -139,7 +140,7 @@ namespace Our.Umbraco.Forms.Mailchimp.Workflow.Workflows
 
         #region Helpers
 
-        private static Tuple<string, Dictionary<string, object>> ParseEmailAndMergeFields(IRecord record, string fields)
+        private static Tuple<string, Dictionary<string, object>> ParseEmailAndMergeFields(Record record, string fields)
         {
             if (string.IsNullOrEmpty(fields))
             {
