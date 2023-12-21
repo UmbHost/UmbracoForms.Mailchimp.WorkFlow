@@ -21,6 +21,7 @@ namespace Our.Umbraco.Forms.Mailchimp.Workflow.Workflows
         private readonly ILogger<MailChimpWorkFlowType> _logger;
         #region Settings
 
+#if NET8_0_OR_GREATER
         [Setting("API KEY", View = "TextField", Description = "Enter the Mailchimp API key.")]
         public string ApiKey { get; set; }
 
@@ -32,6 +33,19 @@ namespace Our.Umbraco.Forms.Mailchimp.Workflow.Workflows
 
         [Setting("Tags", View = "TextField", Description = "List of Tags. Separate by semicolon ';'. Tag must be created before being used. i.e: User; Help Center")]
         public string Tags { get; set; }
+#else
+        [global::Umbraco.Forms.Core.Attributes.Setting("API KEY", View = "TextField", Description = "Enter the Mailchimp API key.")]
+        public string ApiKey { get; set; }
+
+        [global::Umbraco.Forms.Core.Attributes.Setting("List ID", View = "TextField", Description = "Enter the Mailchimp List ID.")]
+        public string ListID { get; set; }
+
+        [global::Umbraco.Forms.Core.Attributes.Setting("Fields", View = "FieldMapper", Description = "Map the needed fields .Minimum Email field for subscribe.")]
+        public string Fields { get; set; }
+
+        [global::Umbraco.Forms.Core.Attributes.Setting("Tags", View = "TextField", Description = "List of Tags. Separate by semicolon ';'. Tag must be created before being used. i.e: User; Help Center")]
+        public string Tags { get; set; }
+#endif
 
         #endregion
 
@@ -43,7 +57,7 @@ namespace Our.Umbraco.Forms.Mailchimp.Workflow.Workflows
             this.Description = "Subscribe email address using MailChimp";
             this.Icon = "icon-autofill";
         }
-
+#if NET8_0_OR_GREATER
         public override async Task<WorkflowExecutionStatus> ExecuteAsync(WorkflowExecutionContext context)
         {
             try
@@ -74,6 +88,38 @@ namespace Our.Umbraco.Forms.Mailchimp.Workflow.Workflows
                 return WorkflowExecutionStatus.Failed;
             }
         }
+#else
+        public override WorkflowExecutionStatus Execute(WorkflowExecutionContext context)
+        {
+            try
+            {
+                var (email, mergeFields) = ParseEmailAndMergeFields(context.Record, Fields);
+                if (string.IsNullOrEmpty(email))
+                {
+                    throw new Exception("Email is missing");
+                }
+
+                Task.Run(async () =>
+                {
+                    await SubscribeMember(email, mergeFields);
+
+                    var tagNames = ParseTags(Tags).ToList();
+                    if (tagNames.Any())
+                    {
+                        await TagMember(email, tagNames);
+                    }
+                });
+
+                return WorkflowExecutionStatus.Completed;
+
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "error : UFMailchimp FlowType");
+                return WorkflowExecutionStatus.Failed;
+            }
+        }
+#endif
 
         public override List<Exception> ValidateSettings()
         {
@@ -139,7 +185,7 @@ namespace Our.Umbraco.Forms.Mailchimp.Workflow.Workflows
         }
 
         #region Helpers
-
+#if NET8_0_OR_GREATER
         private static Tuple<string, Dictionary<string, object>> ParseEmailAndMergeFields(Record record, string fields)
         {
             if (string.IsNullOrEmpty(fields))
@@ -170,6 +216,38 @@ namespace Our.Umbraco.Forms.Mailchimp.Workflow.Workflows
 
             return Tuple.Create(email, mergeFields);
         }
+#else
+        private static Tuple<string, Dictionary<string, object>> ParseEmailAndMergeFields(IRecord record, string fields)
+        {
+            if (string.IsNullOrEmpty(fields))
+            {
+                return null;
+            }
+
+            List<FieldMapping> source = JsonConvert.DeserializeObject<IEnumerable<FieldMapping>>(fields)?.ToList();
+            if (source == null || !source.Any())
+            {
+                return null;
+            }
+
+            string email = "";
+            var mergeFields = new Dictionary<string, object>();
+
+            foreach (var fieldMapping in source)
+            {
+
+                string alias = fieldMapping.Alias;
+                string str = string.IsNullOrEmpty(fieldMapping.StaticValue) ? record.RecordFields[new Guid(fieldMapping.Value)].ValuesAsString(false) : fieldMapping.StaticValue;
+                if (IsEmail(str))
+                {
+                    email = str;
+                }
+                mergeFields.Add(alias, str);
+            }
+
+            return Tuple.Create(email, mergeFields);
+        }
+#endif
 
         private static IEnumerable<string> ParseTags(string tags)
         {
@@ -181,6 +259,6 @@ namespace Our.Umbraco.Forms.Mailchimp.Workflow.Workflows
             return Regex.IsMatch(str, @"\A(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)\Z", RegexOptions.IgnoreCase);
         }
 
-        #endregion
+#endregion
     }
 }
